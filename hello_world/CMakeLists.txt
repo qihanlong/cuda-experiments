@@ -15,7 +15,7 @@ find_package(CUDAToolkit REQUIRED)
 
 include_directories(../cuda-samples/Common)
 
-add_executable(cudaHello hello.cu)
+add_executable(cudaHello hello_world.cu)
 
 target_compile_options(cudaHello PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>)
 
