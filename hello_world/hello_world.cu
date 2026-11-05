@@ -1,4 +1,5 @@
 #include <cmath>
+#include <chrono>
 
 #define N 10000000
 
@@ -57,10 +58,16 @@ int main() {
     cudaMemcpy(d_a, a, sizeof(float) * N, cudaMemcpyHostToDevice);
     cudaMemcpy(d_b, b, sizeof(float) * N, cudaMemcpyHostToDevice);
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     // vector_add_block << <1, 32 >> > (d_out, d_a, d_b, N);
     int block_size = 256;
     int grid_size = (N / block_size) + 1;
     vector_add << <grid_size, block_size >> > (d_out, d_a, d_b, N);
+	
+    auto end = std::chrono::high_resolution_clock::now();
+
+	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
     cudaMemcpy(out, d_out, sizeof(float) * N, cudaMemcpyDeviceToHost);
 
@@ -81,6 +88,8 @@ int main() {
     free(a);
     free(b);
     free(out);
+
+    printf("Addition took: %d microseconds\n", duration.count());
 
     cuda_hello << <1, 1 >> > ();
     return 0;
