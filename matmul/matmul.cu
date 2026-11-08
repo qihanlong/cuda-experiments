@@ -8,8 +8,8 @@ __global__ void matMulNaiveCuda(float* a, int height_a, float* b, int width_b, i
         return;
     }
     
-    int i_a = tid % height_a;
-    int i_b = tid % n;
+    int i_a = tid / height_a;
+    int i_b = tid % height_a;
     
     float sum = 0;
     for (int i = 0; i < n; i++) {
@@ -45,17 +45,7 @@ void multMulNaive(float* a, int height_a, float* b, int width_b, int n, float* c
 // Make a version where matric b is column based?
 // version where the block size is sensitive to matrix size
 
-int main() {
-    float* a, * b, * c;
-
-    int a_h = 2;
-    int b_w = 2;
-    int n = 3;
-    
-    a = (float*)malloc(sizeof(float) * a_h * n);
-    b = (float*)malloc(sizeof(float) * b_w * n);
-    c = (float*)malloc(sizeof(float) * a_h * b_w);
-    
+void setupTest1(float* a, float* b) {
     // a:
     // [4, 2.3, 0]
     // [2, 1, -0.5]
@@ -76,13 +66,27 @@ int main() {
     b[3] = 0.25;
     b[4] = 0;
     b[5] = 10000;
-    
-    multMulNaive(a, a_h, b, b_w, n, c);
+}
 
-    std::cout << "Run complete. Output:" << std::endl;
-    for (int i = 0; i < a_h; i++) {
-        for (int j = 0; j < b_w; j++) {
-            std::cout << c[i + j * b_w] << " ";
+void runTest1() {
+    float* a, * b, * c;
+
+    int m = 2;
+    int p = 2;
+    int n = 3;
+    
+    a = (float*)malloc(sizeof(float) * m * n);
+    b = (float*)malloc(sizeof(float) * p * n);
+    c = (float*)malloc(sizeof(float) * m * p);
+    
+    setupTest1(a, b);
+    
+    multMulNaive(a, m, b, p, n, c);
+
+    std::cout << "Naive run complete. Output:" << std::endl;
+    for (int i = 0; i < p; i++) {
+        for (int j = 0; j < m; j++) {
+            std::cout << c[i * p + j] << " ";
         }
         std::cout << std::endl;
     }
@@ -90,5 +94,64 @@ int main() {
     free(a);
     free(b);
     free(c);
+}
+
+void setupTest2(float* a, float* b) {
+    // a:
+    // [4, 2.3]
+    // [0, 2]
+    // [1, -0.5]
+    // [10000, -99.99]
+    a[0] = 4;
+    a[1] = 2.3;
+    a[2] = 0;
+    a[3] = 2;
+    a[4] = 1;
+    a[5] = -0.5;
+    a[6] = 10000;
+    a[7] = -99.99;
+    
+    // b: Identity
+    // [1, 0]
+    // [0, 1]
+    b[0] = 1;
+    b[1] = 0;
+    b[2] = 0;
+    b[3] = 1;
+}
+
+void runTest2() {
+    float* a, * b, * c;
+
+    int m = 4;
+    int p = 2;
+    int n = 2;
+    
+    a = (float*)malloc(sizeof(float) * m * n);
+    b = (float*)malloc(sizeof(float) * n * p);
+    c = (float*)malloc(sizeof(float) * m * p);
+    
+    setupTest2(a, b);
+    
+    multMulNaive(a, m, b, p, n, c);
+
+    std::cout << "Naive run complete. Output:" << std::endl;
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < p; j++) {
+            std::cout << c[i * m + j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    
+    free(a);
+    free(b);
+    free(c);
+}
+
+int main() {
+    std::cout << "Test 1" << std::endl;
+    runTest1();
+    std::cout << std::endl << "Test 2" << std::endl;
+    runTest2();
     return 0;
 }
