@@ -4,6 +4,10 @@
 __global__ void matMulNaiveCuda(float* a, int height_a, float* b, int width_b, int n, float* c) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     
+    if (tid >= height_a * width_b) {
+        return;
+    }
+    
     int i_a = tid % height_a;
     int i_b = tid % n;
     
