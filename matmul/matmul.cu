@@ -8,8 +8,8 @@ __global__ void matMulNaiveCuda(float* a, int height_a, float* b, int width_b, i
         return;
     }
     
-    int i_a = tid / height_a;
-    int i_b = tid % height_a;
+    int i_a = tid / n;
+    int i_b = tid % width_b;
     
     float sum = 0;
     for (int i = 0; i < n; i++) {
@@ -42,10 +42,32 @@ void multMulNaive(float* a, int height_a, float* b, int width_b, int n, float* c
     cudaFree(d_c);
 }
 
+void matMulCPUAux(float* a, float* b, float* c, int m, int p, int n, int tid) {
+    if (tid >= m * p) {
+        return;
+    }
+    
+    int i_a = tid / n;
+    int i_b = tid % p;
+    
+    float sum = 0;
+    for (int i = 0; i < n; i++) {
+        sum += a[i + i_a * n] * b[i_b + i * p];
+    }
+    c[tid] = sum;
+}
+
+void multMulCPU(float* a, float* b, float* c, int m, int p, int n) {
+    int threads = m * p + 1;
+    for (int i = 0; i < threads; i++) {
+        matMulCPUAux(a, b, c, m, p, n, i);
+    }
+}
+
 // Make a version where matric b is column based?
 // version where the block size is sensitive to matrix size
 
-void setupTest1(float* a, float* b) {
+void setupTest1(float* a, float* b, float* c) {
     // a:
     // [4, 2.3, 0]
     // [2, 1, -0.5]
@@ -66,6 +88,10 @@ void setupTest1(float* a, float* b) {
     b[3] = 0.25;
     b[4] = 0;
     b[5] = 10000;
+    
+    for (int i = 0; i < 4; i++) {
+        c[i] = 0;
+    }
 }
 
 void runTest1() {
@@ -79,13 +105,13 @@ void runTest1() {
     b = (float*)malloc(sizeof(float) * p * n);
     c = (float*)malloc(sizeof(float) * m * p);
     
-    setupTest1(a, b);
+    setupTest1(a, b, c);
     
     multMulNaive(a, m, b, p, n, c);
 
     std::cout << "Naive run complete. Output:" << std::endl;
-    for (int i = 0; i < p; i++) {
-        for (int j = 0; j < m; j++) {
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < p; j++) {
             std::cout << c[i * p + j] << " ";
         }
         std::cout << std::endl;
@@ -96,7 +122,7 @@ void runTest1() {
     free(c);
 }
 
-void setupTest2(float* a, float* b) {
+void setupTest2(float* a, float* b, float* c) {
     // a:
     // [4, 2.3]
     // [0, 2]
@@ -118,6 +144,10 @@ void setupTest2(float* a, float* b) {
     b[1] = 0;
     b[2] = 0;
     b[3] = 1;
+    
+    for (int i = 0; i < 8; i++) {
+        c[i] = 0;
+    }
 }
 
 void runTest2() {
@@ -131,17 +161,31 @@ void runTest2() {
     b = (float*)malloc(sizeof(float) * n * p);
     c = (float*)malloc(sizeof(float) * m * p);
     
-    setupTest2(a, b);
+    setupTest2(a, b, c);
+    
+    multMulCPU(a, b, c, m, p, n);
+
+    std::cout << "CPU run complete. Output:" << std::endl;
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < p; j++) {
+            std::cout << c[i * p + j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
+    
+    setupTest2(a, b, c);
     
     multMulNaive(a, m, b, p, n, c);
 
     std::cout << "Naive run complete. Output:" << std::endl;
     for (int i = 0; i < m; i++) {
         for (int j = 0; j < p; j++) {
-            std::cout << c[i * m + j] << " ";
+            std::cout << c[i * p + j] << " ";
         }
         std::cout << std::endl;
     }
+    std::cout << std::endl;
     
     free(a);
     free(b);
