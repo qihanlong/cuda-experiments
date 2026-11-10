@@ -1,5 +1,5 @@
-
 #include <iostream>
+#include <chrono>
 
 __global__ void matMulNaiveCuda(float* a, int height_a, float* b, int width_b, int n, float* c) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -95,7 +95,7 @@ void setupTest1(float* a, float* b, float* c) {
 }
 
 void runTest1() {
-    float* a, * b, * c;
+    float* a, * b, * c, *cpu;
 
     int m = 2;
     int p = 2;
@@ -104,12 +104,45 @@ void runTest1() {
     a = (float*)malloc(sizeof(float) * m * n);
     b = (float*)malloc(sizeof(float) * p * n);
     c = (float*)malloc(sizeof(float) * m * p);
+    cpu = (float*)malloc(sizeof(float) * m * p);
     
     setupTest1(a, b, c);
     
-    multMulNaive(a, m, b, p, n, c);
 
-    std::cout << "Naive run complete. Output:" << std::endl;
+    auto start = std::chrono::high_resolution_clock::now();
+    multMulCPU(a, b, cpu, m, p, n);
+	
+    auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    std::cout << "CPU run complete. Took " << duration.count() << " milliseconds. Output:" << std::endl;
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < p; j++) {
+            std::cout << cpu[i * p + j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    
+
+    start = std::chrono::high_resolution_clock::now();
+    multMulNaive(a, m, b, p, n, c);
+	
+    end = std::chrono::high_resolution_clock::now();
+	duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    std::cout << "Naive run complete. Took " << duration.count() << " milliseconds." << std::endl;
+    
+    bool match = true;
+    for (int i = 0; i < m * p; i++) {
+        match = match && (c[i] == cpu[i]);
+    }
+    if (match) {
+        std::cout << "Matches CPU output" << std::endl;
+    } else {
+        std::cout << "ERROR: Does not match CPU output" << std::endl;
+    }
+    
+    std::cout << "Output:" << std::endl;
     for (int i = 0; i < m; i++) {
         for (int j = 0; j < p; j++) {
             std::cout << c[i * p + j] << " ";
@@ -120,6 +153,7 @@ void runTest1() {
     free(a);
     free(b);
     free(c);
+    free(cpu);
 }
 
 void setupTest2(float* a, float* b, float* c) {
@@ -151,7 +185,7 @@ void setupTest2(float* a, float* b, float* c) {
 }
 
 void runTest2() {
-    float* a, * b, * c;
+    float* a, * b, * c, * cpu;
 
     int m = 4;
     int p = 2;
@@ -160,36 +194,57 @@ void runTest2() {
     a = (float*)malloc(sizeof(float) * m * n);
     b = (float*)malloc(sizeof(float) * n * p);
     c = (float*)malloc(sizeof(float) * m * p);
+    cpu = (float*)malloc(sizeof(float) * m * p);
     
     setupTest2(a, b, c);
     
-    multMulCPU(a, b, c, m, p, n);
+    auto start = std::chrono::high_resolution_clock::now();
+    multMulCPU(a, b, cpu, m, p, n);
+	
+    auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-    std::cout << "CPU run complete. Output:" << std::endl;
+    std::cout << "CPU run complete. Took " << duration.count() << " microseconds. Output:" << std::endl;
     for (int i = 0; i < m; i++) {
         for (int j = 0; j < p; j++) {
-            std::cout << c[i * p + j] << " ";
+            std::cout << cpu[i * p + j] << " ";
         }
         std::cout << std::endl;
     }
     std::cout << std::endl;
     
-    setupTest2(a, b, c);
     
+
+    start = std::chrono::high_resolution_clock::now();
     multMulNaive(a, m, b, p, n, c);
+	
+    end = std::chrono::high_resolution_clock::now();
+	duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-    std::cout << "Naive run complete. Output:" << std::endl;
+    std::cout << "Naive run complete. Took " << duration.count() << " microseconds." << std::endl;
+    
+    bool match = true;
+    for (int i = 0; i < m * p; i++) {
+        match = match && (c[i] == cpu[i]);
+    }
+    if (match) {
+        std::cout << "Matches CPU output" << std::endl;
+    } else {
+        std::cout << "ERROR: Does not match CPU output" << std::endl;
+    }
+    
+    std::cout << "Output:" << std::endl;
     for (int i = 0; i < m; i++) {
         for (int j = 0; j < p; j++) {
             std::cout << c[i * p + j] << " ";
         }
         std::cout << std::endl;
     }
-    std::cout << std::endl;
     
     free(a);
     free(b);
     free(c);
+    free(cpu);
 }
 
 int main() {
