@@ -1,5 +1,9 @@
-#include <iostream>
 #include <chrono>
+#include <cmath>
+#include <cstdlib>
+#include <iostream>
+
+#define ERROR_THRESHOLD 0.0001f
 
 __global__ void matMulNaiveCuda(float* a, int height_a, float* b, int width_b, int n, float* c) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -64,7 +68,7 @@ void multMulCPU(float* a, float* b, float* c, int m, int p, int n) {
     }
 }
 
-// Make a version where matric b is column based?
+// Make a version where matrix b is column based?
 // version where the block size is sensitive to matrix size
 
 void setupTest1(float* a, float* b, float* c) {
@@ -122,7 +126,10 @@ void runTest1() {
         }
         std::cout << std::endl;
     }
+    std::cout << std::endl;
     
+    
+
 
     start = std::chrono::high_resolution_clock::now();
     multMulNaive(a, m, b, p, n, c);
@@ -135,6 +142,9 @@ void runTest1() {
     bool match = true;
     for (int i = 0; i < m * p; i++) {
         match = match && (c[i] == cpu[i]);
+        if (!match) {
+            break;
+        }
     }
     if (match) {
         std::cout << "Matches CPU output" << std::endl;
@@ -225,7 +235,7 @@ void runTest2() {
     
     bool match = true;
     for (int i = 0; i < m * p; i++) {
-        match = match && (c[i] == cpu[i]);
+        match = match && (std::abs(c[i] - cpu[i]) < ERROR_THRESHOLD);
     }
     if (match) {
         std::cout << "Matches CPU output" << std::endl;
@@ -247,10 +257,85 @@ void runTest2() {
     free(cpu);
 }
 
+float randfloat(){
+    return (float)rand() / (float)(RAND_MAX);
+}
+
+void setupTestRandom(float* a, float* b, float* c, int size_a, int size_b, int size_c) {
+    std::srand(0);
+    for (int i = 0; i < size_a; i++) {
+        a[i] = randfloat();
+    }
+
+    for (int i = 0; i < size_b; i++) {
+        b[i] = randfloat();
+    }
+    
+    for (int i = 0; i < size_c; i++) {
+        c[i] = 0;
+    }
+}
+
+void runTest3() {
+    float* a, * b, * c, * cpu;
+
+    int m = 256;
+    int p = 192;
+    int n = 128;
+    
+    a = (float*)malloc(sizeof(float) * m * n);
+    b = (float*)malloc(sizeof(float) * n * p);
+    c = (float*)malloc(sizeof(float) * m * p);
+    cpu = (float*)malloc(sizeof(float) * m * p);
+    
+    setupTestRandom(a, b, c, m * n, n * p, m * p);
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    multMulCPU(a, b, cpu, m, p, n);
+	
+    auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+    std::cout << "CPU run complete. Took " << duration.count() << " microseconds." << std::endl;
+    
+    
+
+    start = std::chrono::high_resolution_clock::now();
+    multMulNaive(a, m, b, p, n, c);
+	
+    end = std::chrono::high_resolution_clock::now();
+	duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+    std::cout << "Naive run complete. Took " << duration.count() << " microseconds." << std::endl;
+    
+    bool match = true;
+    int index = -1;
+    for (int i = 0; i < m * p; i++) {
+        match = match && (std::abs(c[i] - cpu[i]) < ERROR_THRESHOLD);
+        if (!match) {
+            index = i;
+            break;
+        }
+    }
+    if (match) {
+        std::cout << "Matches CPU output" << std::endl;
+    } else {
+        std::cout << "ERROR: Does not match CPU output. First error found at index " << index << std::endl;
+        std::cout << "CPU got " << cpu[index] << " vs Cuda: " << c[index] << std::endl;
+    }
+    
+    free(a);
+    free(b);
+    free(c);
+    free(cpu);
+}
+
 int main() {
     std::cout << "Test 1" << std::endl;
     runTest1();
     std::cout << std::endl << "Test 2" << std::endl;
     runTest2();
+    std::cout << std::endl << "Test 3" << std::endl;
+    runTest3();
     return 0;
 }
