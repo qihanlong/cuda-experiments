@@ -12,7 +12,7 @@ __global__ void matMulNaiveCuda(float* a, int height_a, float* b, int width_b, i
         return;
     }
     
-    int i_a = tid / n;
+    int i_a = tid / width_b;
     int i_b = tid % width_b;
     
     float sum = 0;
@@ -51,12 +51,12 @@ void matMulCPUAux(float* a, float* b, float* c, int m, int p, int n, int tid) {
         return;
     }
     
-    int i_a = tid / n;
-    int i_b = tid % p;
+    int a_row = tid / p;
+    int b_column = tid % p;
     
     float sum = 0;
     for (int i = 0; i < n; i++) {
-        sum += a[i + i_a * n] * b[i_b + i * p];
+        sum += a[i + a_row * n] * b[b_column + i * p];
     }
     c[tid] = sum;
 }
@@ -70,6 +70,16 @@ void multMulCPU(float* a, float* b, float* c, int m, int p, int n) {
 
 // Make a version where matrix b is column based?
 // version where the block size is sensitive to matrix size
+
+void printMatrix(float* a, int m, int n) {
+    for (int i = 0; i < m; i++) {
+        std::cout << "[";
+        for (int j = 0; j < n; j++) {
+            std::cout << a[i * n + j] << " ";
+        }
+        std::cout << "]" << std::endl;
+    }
+}
 
 void setupTest1(float* a, float* b, float* c) {
     // a:
@@ -120,12 +130,7 @@ void runTest1() {
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     std::cout << "CPU run complete. Took " << duration.count() << " milliseconds. Output:" << std::endl;
-    for (int i = 0; i < m; i++) {
-        for (int j = 0; j < p; j++) {
-            std::cout << cpu[i * p + j] << " ";
-        }
-        std::cout << std::endl;
-    }
+    printMatrix(cpu, m, p);
     std::cout << std::endl;
     
     
@@ -153,12 +158,7 @@ void runTest1() {
     }
     
     std::cout << "Output:" << std::endl;
-    for (int i = 0; i < m; i++) {
-        for (int j = 0; j < p; j++) {
-            std::cout << c[i * p + j] << " ";
-        }
-        std::cout << std::endl;
-    }
+    printMatrix(c, m, p);
     
     free(a);
     free(b);
@@ -215,13 +215,7 @@ void runTest2() {
 	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
     std::cout << "CPU run complete. Took " << duration.count() << " microseconds. Output:" << std::endl;
-    for (int i = 0; i < m; i++) {
-        for (int j = 0; j < p; j++) {
-            std::cout << cpu[i * p + j] << " ";
-        }
-        std::cout << std::endl;
-    }
-    std::cout << std::endl;
+    printMatrix(cpu, m, p);
     
     
 
@@ -244,12 +238,7 @@ void runTest2() {
     }
     
     std::cout << "Output:" << std::endl;
-    for (int i = 0; i < m; i++) {
-        for (int j = 0; j < p; j++) {
-            std::cout << c[i * p + j] << " ";
-        }
-        std::cout << std::endl;
-    }
+    printMatrix(c, m, p);
     
     free(a);
     free(b);
@@ -262,7 +251,6 @@ float randfloat(){
 }
 
 void setupTestRandom(float* a, float* b, float* c, int size_a, int size_b, int size_c) {
-    std::srand(0);
     for (int i = 0; i < size_a; i++) {
         a[i] = randfloat();
     }
@@ -288,6 +276,117 @@ void runTest3() {
     c = (float*)malloc(sizeof(float) * m * p);
     cpu = (float*)malloc(sizeof(float) * m * p);
     
+    std::srand(3);
+    setupTestRandom(a, b, c, m * n, n * p, m * p);
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    multMulCPU(a, b, cpu, m, p, n);
+	
+    auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+    std::cout << "CPU run complete. Took " << duration.count() << " microseconds." << std::endl;
+    
+    
+
+    start = std::chrono::high_resolution_clock::now();
+    multMulNaive(a, m, b, p, n, c);
+	
+    end = std::chrono::high_resolution_clock::now();
+	duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+    std::cout << "Naive run complete. Took " << duration.count() << " microseconds." << std::endl;
+    
+    bool match = true;
+    int index = -1;
+    for (int i = 0; i < m * p; i++) {
+        match = match && (std::abs(c[i] - cpu[i]) < ERROR_THRESHOLD);
+        if (!match) {
+            index = i;
+            break;
+        }
+    }
+    if (match) {
+        std::cout << "Matches CPU output" << std::endl;
+    } else {
+        std::cout << "ERROR: Does not match CPU output. First error found at index " << index << std::endl;
+        std::cout << "CPU got " << cpu[index] << " vs Cuda: " << c[index] << std::endl;
+    }
+    
+    free(a);
+    free(b);
+    free(c);
+    free(cpu);
+}
+
+void runTest4() {
+    float* a, * b, * c, * cpu;
+
+    int m = 4000;
+    int p = 3000;
+    int n = 1;
+    
+    a = (float*)malloc(sizeof(float) * m * n);
+    b = (float*)malloc(sizeof(float) * n * p);
+    c = (float*)malloc(sizeof(float) * m * p);
+    cpu = (float*)malloc(sizeof(float) * m * p);
+    
+    std::srand(4);
+    setupTestRandom(a, b, c, m * n, n * p, m * p);
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    multMulCPU(a, b, cpu, m, p, n);
+	
+    auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+    std::cout << "CPU run complete. Took " << duration.count() << " microseconds." << std::endl;
+    
+    
+
+    start = std::chrono::high_resolution_clock::now();
+    multMulNaive(a, m, b, p, n, c);
+	
+    end = std::chrono::high_resolution_clock::now();
+	duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+    std::cout << "Naive run complete. Took " << duration.count() << " microseconds." << std::endl;
+    
+    bool match = true;
+    int index = -1;
+    for (int i = 0; i < m * p; i++) {
+        match = match && (std::abs(c[i] - cpu[i]) < ERROR_THRESHOLD);
+        if (!match) {
+            index = i;
+            break;
+        }
+    }
+    if (match) {
+        std::cout << "Matches CPU output" << std::endl;
+    } else {
+        std::cout << "ERROR: Does not match CPU output. First error found at index " << index << std::endl;
+        std::cout << "CPU got " << cpu[index] << " vs Cuda: " << c[index] << std::endl;
+    }
+    
+    free(a);
+    free(b);
+    free(c);
+    free(cpu);
+}
+
+void runTest5() {
+    float* a, * b, * c, * cpu;
+
+    int m = 400;
+    int p = 600;
+    int n = 1000;
+    
+    a = (float*)malloc(sizeof(float) * m * n);
+    b = (float*)malloc(sizeof(float) * n * p);
+    c = (float*)malloc(sizeof(float) * m * p);
+    cpu = (float*)malloc(sizeof(float) * m * p);
+    
+    std::srand(5);
     setupTestRandom(a, b, c, m * n, n * p, m * p);
     
     auto start = std::chrono::high_resolution_clock::now();
@@ -337,5 +436,9 @@ int main() {
     runTest2();
     std::cout << std::endl << "Test 3" << std::endl;
     runTest3();
+    std::cout << std::endl << "Test 4" << std::endl;
+    runTest4();
+    std::cout << std::endl << "Test 5" << std::endl;
+    runTest5();
     return 0;
 }
