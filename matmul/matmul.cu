@@ -5,24 +5,24 @@
 
 #define ERROR_THRESHOLD 0.0001f
 
-__global__ void matMulNaiveCuda(float* a, int height_a, float* b, int width_b, int n, float* c) {
+__global__ void matMulCuda1Aux(float* a, int height_a, float* b, int width_b, int n, float* c) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     
     if (tid >= height_a * width_b) {
         return;
     }
     
-    int i_a = tid / width_b;
-    int i_b = tid % width_b;
+    int a_row = tid / width_b;
+    int b_column = tid % width_b;
     
     float sum = 0;
     for (int i = 0; i < n; i++) {
-        sum += a[i + i_a * n] * b[i_b + i * width_b];
+        sum += a[i + a_row * n] * b[b_column + i * width_b];
     }
     c[tid] = sum;
 }
 
-void multMulNaive(float* a, int height_a, float* b, int width_b, int n, float* c) {
+void matMulCuda1(float* a, int height_a, float* b, int width_b, int n, float* c) {
     int a_size = height_a * n;
     int b_size = width_b * n;
     int c_size = height_a * width_b;
@@ -38,7 +38,8 @@ void multMulNaive(float* a, int height_a, float* b, int width_b, int n, float* c
     
     int block_size = 256;
     int grid_size = (c_size / block_size) + 1;
-    matMulNaiveCuda << <grid_size, block_size >> > (d_a, height_a, d_b, width_b, n, d_c);
+    matMulCuda1Aux << <grid_size, block_size >> > (d_a, height_a, d_b, width_b, n, d_c);
+    cudaDeviceSynchronize();
 
     cudaMemcpy(c, d_c, sizeof(float) * c_size, cudaMemcpyDeviceToHost);
     cudaFree(d_a);
@@ -61,7 +62,7 @@ void matMulCPUAux(float* a, float* b, float* c, int m, int p, int n, int tid) {
     c[tid] = sum;
 }
 
-void multMulCPU(float* a, float* b, float* c, int m, int p, int n) {
+void matMulCPU(float* a, float* b, float* c, int m, int p, int n) {
     int threads = m * p + 1;
     for (int i = 0; i < threads; i++) {
         matMulCPUAux(a, b, c, m, p, n, i);
@@ -124,7 +125,7 @@ void runTest1() {
     
 
     auto start = std::chrono::high_resolution_clock::now();
-    multMulCPU(a, b, cpu, m, p, n);
+    matMulCPU(a, b, cpu, m, p, n);
 	
     auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -137,12 +138,12 @@ void runTest1() {
 
 
     start = std::chrono::high_resolution_clock::now();
-    multMulNaive(a, m, b, p, n, c);
+    matMulCuda1(a, m, b, p, n, c);
 	
     end = std::chrono::high_resolution_clock::now();
 	duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    std::cout << "Naive run complete. Took " << duration.count() << " milliseconds." << std::endl;
+    std::cout << "Cuda 1 run complete. Took " << duration.count() << " milliseconds." << std::endl;
     
     bool match = true;
     for (int i = 0; i < m * p; i++) {
@@ -209,7 +210,7 @@ void runTest2() {
     setupTest2(a, b, c);
     
     auto start = std::chrono::high_resolution_clock::now();
-    multMulCPU(a, b, cpu, m, p, n);
+    matMulCPU(a, b, cpu, m, p, n);
 	
     auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -220,12 +221,12 @@ void runTest2() {
     
 
     start = std::chrono::high_resolution_clock::now();
-    multMulNaive(a, m, b, p, n, c);
+    matMulCuda1(a, m, b, p, n, c);
 	
     end = std::chrono::high_resolution_clock::now();
 	duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-    std::cout << "Naive run complete. Took " << duration.count() << " microseconds." << std::endl;
+    std::cout << "Cuda 1 run complete. Took " << duration.count() << " microseconds." << std::endl;
     
     bool match = true;
     for (int i = 0; i < m * p; i++) {
@@ -280,7 +281,7 @@ void runTest3() {
     setupTestRandom(a, b, c, m * n, n * p, m * p);
     
     auto start = std::chrono::high_resolution_clock::now();
-    multMulCPU(a, b, cpu, m, p, n);
+    matMulCPU(a, b, cpu, m, p, n);
 	
     auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -290,12 +291,12 @@ void runTest3() {
     
 
     start = std::chrono::high_resolution_clock::now();
-    multMulNaive(a, m, b, p, n, c);
+    matMulCuda1(a, m, b, p, n, c);
 	
     end = std::chrono::high_resolution_clock::now();
 	duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-    std::cout << "Naive run complete. Took " << duration.count() << " microseconds." << std::endl;
+    std::cout << "Cuda 1 run complete. Took " << duration.count() << " microseconds." << std::endl;
     
     bool match = true;
     int index = -1;
@@ -335,7 +336,7 @@ void runTest4() {
     setupTestRandom(a, b, c, m * n, n * p, m * p);
     
     auto start = std::chrono::high_resolution_clock::now();
-    multMulCPU(a, b, cpu, m, p, n);
+    matMulCPU(a, b, cpu, m, p, n);
 	
     auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -345,12 +346,12 @@ void runTest4() {
     
 
     start = std::chrono::high_resolution_clock::now();
-    multMulNaive(a, m, b, p, n, c);
+    matMulCuda1(a, m, b, p, n, c);
 	
     end = std::chrono::high_resolution_clock::now();
 	duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-    std::cout << "Naive run complete. Took " << duration.count() << " microseconds." << std::endl;
+    std::cout << "Cuda 1 run complete. Took " << duration.count() << " microseconds." << std::endl;
     
     bool match = true;
     int index = -1;
@@ -390,7 +391,7 @@ void runTest5() {
     setupTestRandom(a, b, c, m * n, n * p, m * p);
     
     auto start = std::chrono::high_resolution_clock::now();
-    multMulCPU(a, b, cpu, m, p, n);
+    matMulCPU(a, b, cpu, m, p, n);
 	
     auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -400,12 +401,12 @@ void runTest5() {
     
 
     start = std::chrono::high_resolution_clock::now();
-    multMulNaive(a, m, b, p, n, c);
+    matMulCuda1(a, m, b, p, n, c);
 	
     end = std::chrono::high_resolution_clock::now();
 	duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-    std::cout << "Naive run complete. Took " << duration.count() << " microseconds." << std::endl;
+    std::cout << "Cuda 1 run complete. Took " << duration.count() << " microseconds." << std::endl;
     
     bool match = true;
     int index = -1;
